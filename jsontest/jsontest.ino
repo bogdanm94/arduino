@@ -17,9 +17,11 @@
 ESP8266WiFiMulti WiFiMulti;
 DynamicJsonBuffer jsonBuffer;
 
+#define relay 16
+#define buzzer 12
+#define tOpen 3
 
-
-rdm630 rfid(12, 14);
+rdm630 rfid(13, 14);
 unsigned long previousMillis = 0;
 const unsigned long interval =  60UL * 1000UL;
 
@@ -27,7 +29,10 @@ const unsigned long interval =  60UL * 1000UL;
 
 
 void setup() {
-
+  pinMode(relay, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  digitalWrite(relay, HIGH);
+  digitalWrite(buzzer, LOW);
   USE_SERIAL.begin(115200);
   // USE_SERIAL.setDebugOutput(true);
   EEPROM.begin(500);
@@ -44,7 +49,8 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFiMulti.addAP("Markovic 2.4GHz", "0216363646");
-
+  gettags();
+  beep(3,50);
 }
 
 void loop() {
@@ -79,19 +85,44 @@ void loop() {
       ((unsigned long int)data[3] << 8) +
       data[4];
     if (data != 0 ) {
-      if (checkTag(id, result))
+      if (checkTag(id, result)) {
+        beep(1,200);
         Serial.println("TAG OK");
-      else
-        Serial.println("TAG NOT OK");
-    }
-  }
-}
+        Serial.print("Counting");
+        digitalWrite(relay, LOW);
+        for (int i = 0; i < tOpen; i++) {
+          Serial.print(".");
+          delay(1000);
+        }
+        digitalWrite(relay, HIGH);
 
+      }
+      else{
+            beep(2,80);
+            Serial.println("TAG NOT OK");     
+      }
+        
+    }
+
+  }
+  rfid.flush();
+
+}
+void beep(int times, int del) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(buzzer, HIGH);
+    delay(del);
+    digitalWrite(buzzer, LOW);
+    delay(del);
+  }
+
+}
 bool checkTag(unsigned long tag, unsigned long tag2) {
 
   for (int i = 0; i < EEPROM.length(); i += sizeof(unsigned long)) {
     unsigned long value;
     EEPROM.get(i, value);
+    Serial.println();
     Serial.print(i);
     Serial.print("\t");
     Serial.print(value);
@@ -106,16 +137,15 @@ bool checkTag(unsigned long tag, unsigned long tag2) {
 }
 
 void gettags() {
-  for (int i = 0 ; i < EEPROM.length() ; i++) {
-    EEPROM.write(i, 0);
-  }
+
+  Serial.println("getting tags");
   // wait for WiFi connection
   if ((WiFiMulti.run() == WL_CONNECTED)) {
 
     // Connect to HTTP server
     WiFiClient client;
     client.setTimeout(10000);
-    if (!client.connect("markovic.duckdns.org", 80)) {
+    if (!client.connect("192.168.1.2", 81)) {
       Serial.println(F("Connection failed"));
       return;
     }
@@ -124,7 +154,7 @@ void gettags() {
 
     // Send HTTP request
     client.println(F("GET /api/rfid/gettags/jkv1954 HTTP/1.0"));
-    client.println(F("Host: markovic.duckdns.org"));
+    client.println(F("Host: 192.168.1.2:81"));
     client.println(F("Connection: close"));
     if (client.println() == 0) {
       Serial.println(F("Failed to send request"));
@@ -185,6 +215,12 @@ void gettags() {
     }
     // Disconnect
     client.stop();
+  }
+}
+
+void clearEEPROM() {
+  for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
   }
 }
 
